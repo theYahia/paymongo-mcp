@@ -1,41 +1,78 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createPaymentIntentSchema, handleCreatePaymentIntent } from "./tools/create-payment-intent.js";
-import { getPaymentIntentSchema, handleGetPaymentIntent } from "./tools/get-payment-intent.js";
-import { createSourceSchema, handleCreateSource } from "./tools/create-source.js";
-import { getSourceSchema, handleGetSource } from "./tools/get-source.js";
-import { createPaymentSchema, handleCreatePayment } from "./tools/create-payment.js";
-import { listPaymentsSchema, handleListPayments } from "./tools/list-payments.js";
-import { createRefundSchema, handleCreateRefund } from "./tools/create-refund.js";
-import { createCheckoutSchema, handleCreateCheckout } from "./tools/create-checkout.js";
-import { getCheckoutSchema, handleGetCheckout } from "./tools/get-checkout.js";
 
-const server = new McpServer({ name: "paymongo-mcp", version: "1.0.0" });
+import { tool, type ToolDescriptor } from "./lib/tool.js";
 
-server.tool("create_payment_intent", "Create a payment intent.", createPaymentIntentSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleCreatePaymentIntent(params) }] }));
-server.tool("get_payment_intent", "Get payment intent by ID.", getPaymentIntentSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleGetPaymentIntent(params) }] }));
-server.tool("create_source", "Create a payment source (GCash/GrabPay).", createSourceSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleCreateSource(params) }] }));
-server.tool("get_source", "Get source details by ID.", getSourceSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleGetSource(params) }] }));
-server.tool("create_payment", "Create a payment from a source.", createPaymentSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleCreatePayment(params) }] }));
-server.tool("list_payments", "List payments with pagination.", listPaymentsSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleListPayments(params) }] }));
-server.tool("create_refund", "Refund a payment.", createRefundSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleCreateRefund(params) }] }));
-server.tool("create_checkout", "Create a checkout session.", createCheckoutSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleCreateCheckout(params) }] }));
-server.tool("get_checkout", "Get checkout session by ID.", getCheckoutSchema.shape,
-  async (params) => ({ content: [{ type: "text", text: await handleGetCheckout(params) }] }));
+import { createPaymentIntentTool } from "./tools/create-payment-intent.js";
+import { getPaymentIntentTool } from "./tools/get-payment-intent.js";
+import { createSourceTool } from "./tools/create-source.js";
+import { getSourceTool } from "./tools/get-source.js";
+import { createPaymentTool } from "./tools/create-payment.js";
+import { listPaymentsTool } from "./tools/list-payments.js";
+import { createRefundTool } from "./tools/create-refund.js";
+import { createCheckoutTool } from "./tools/create-checkout.js";
+import { getCheckoutTool } from "./tools/get-checkout.js";
+import { linksDescriptors } from "./tools/links.js";
+import { webhooksDescriptors } from "./tools/webhooks.js";
+import { paymentMethodsDescriptors } from "./tools/payment-methods.js";
+import { customersDescriptors } from "./tools/customers.js";
+import { refundsDescriptors } from "./tools/refunds.js";
+
+const FALLBACK_VERSION = "1.1.0";
+
+/** Read the package version at runtime (dist/index.js → ../package.json). */
+function getVersion(): string {
+  try {
+    const require = createRequire(import.meta.url);
+    const pkg = require("../package.json") as { version?: string };
+    return pkg.version ?? FALLBACK_VERSION;
+  } catch {
+    return FALLBACK_VERSION;
+  }
+}
+
+const tools: ToolDescriptor[] = [
+  createPaymentIntentTool,
+  getPaymentIntentTool,
+  createSourceTool,
+  getSourceTool,
+  createPaymentTool,
+  listPaymentsTool,
+  createRefundTool,
+  createCheckoutTool,
+  getCheckoutTool,
+  ...linksDescriptors,
+  ...webhooksDescriptors,
+  ...paymentMethodsDescriptors,
+  ...customersDescriptors,
+  ...refundsDescriptors,
+];
+
+const server = new McpServer({ name: "paymongo-mcp", version: getVersion() });
+
+for (const t of tools) {
+  server.registerTool(
+    t.name,
+    {
+      title: t.title,
+      description: t.description,
+      inputSchema: t.inputSchema,
+      annotations: t.annotations,
+    },
+    tool(t.handler),
+  );
+}
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("[paymongo-mcp] Server started. 9 tools available.");
+  console.error(`[paymongo-mcp] Server started. ${tools.length} tools available.`);
 }
-main().catch((error) => { console.error("[paymongo-mcp] Error:", error); process.exit(1); });
+
+main().catch((error) => {
+  console.error("[paymongo-mcp] Error:", error);
+  process.exit(1);
+});

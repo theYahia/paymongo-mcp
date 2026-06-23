@@ -1,6 +1,6 @@
 {
   "name": "@theyahia/paymongo-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server for PayMongo payment gateway (Philippines)",
   "type": "module",
   "main": "dist/index.js",
@@ -9,6 +9,7 @@
   "engines": { "node": ">=18.0.0" },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
@@ -16,7 +17,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
