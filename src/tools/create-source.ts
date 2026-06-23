@@ -1,24 +1,43 @@
 import { z } from "zod";
-import { PayMongoClient } from "../client.js";
-const client = new PayMongoClient();
+import { getClient } from "../client.js";
+import type { ToolDescriptor } from "../lib/tool.js";
 
 export const createSourceSchema = z.object({
-  amount: z.number().positive().describe("Amount in centavos"),
-  type: z.enum(["gcash", "grab_pay"]).describe("Source type"),
-  currency: z.string().default("PHP").describe("Currency code"),
-  redirect_success: z.string().url().describe("Success redirect URL"),
-  redirect_failed: z.string().url().describe("Failed redirect URL"),
+  amount: z
+    .number()
+    .int()
+    .positive()
+    .describe("Amount in centavos as an integer (e.g. 5000 = ₱50.00)."),
+  type: z.enum(["gcash", "grab_pay"]).describe("Source type (e-wallet)."),
+  currency: z.string().default("PHP").describe("ISO currency code."),
+  redirect_success: z.string().url().describe("URL to redirect to on success."),
+  redirect_failed: z.string().url().describe("URL to redirect to on failure."),
 });
 
-export async function handleCreateSource(params: z.infer<typeof createSourceSchema>): Promise<string> {
+export async function handleCreateSource(
+  params: z.infer<typeof createSourceSchema>,
+): Promise<string> {
   const body = {
     data: {
       attributes: {
-        amount: params.amount, currency: params.currency, type: params.type,
+        amount: params.amount,
+        currency: params.currency,
+        type: params.type,
         redirect: { success: params.redirect_success, failed: params.redirect_failed },
       },
     },
   };
-  const result = await client.request("POST", "/sources", body);
+  const result = await getClient().request("POST", "/sources", body, {
+    moneyMoving: true,
+  });
   return JSON.stringify(result, null, 2);
 }
+
+export const createSourceTool: ToolDescriptor = {
+  name: "create_source",
+  title: "Create Source",
+  description: "Create a GCash/GrabPay payment source (returns a redirect checkout URL).",
+  inputSchema: createSourceSchema.shape,
+  annotations: { destructiveHint: true, openWorldHint: true },
+  handler: handleCreateSource,
+};
